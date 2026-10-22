@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>螢光底色分類器</title>
+<style>
+:root{
+  --bg:#e8ecf0; --bg2:#f7f9fb; --panel:#ffffff; --ink:#0f1720; --ink2:#3d4a58; --line:#b9c4cf; --line2:#d6dde4;
+  --accent:#d9400b; --ok:#0b8a4b; --bad:#d93025; --code:#e9eef3; --none:#9aa7b4;
+  --shadow:0 1px 0 rgba(255,255,255,.9) inset,0 14px 28px -18px rgba(15,30,50,.45);
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#090d12; --bg2:#141b23; --panel:#141b23; --ink:#f1f5f9; --ink2:#adbbc9; --line:#2d3b49; --line2:#1f2a35;
+  --accent:#ff6a2c; --ok:#3ddc84; --bad:#ff6b5e; --code:#1d2833; --none:#5f6f7e;
+  --shadow:0 1px 0 rgba(255,255,255,.06) inset,0 16px 30px -18px rgba(0,0,0,.8); color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);background-image:radial-gradient(1100px 520px at 50% -120px,var(--bg2),transparent 70%);
+  color:var(--ink);font:16px/1.65 var(--sans);padding:36px max(16px,env(safe-area-inset-right)) 72px max(16px,env(safe-area-inset-left))}
+main{max-width:860px;margin:0 auto;display:grid;gap:22px}
+.eyebrow{font:600 .8rem/1 var(--sans);letter-spacing:.22em;color:var(--accent)}
+h1{font-size:clamp(2rem,5.5vw,2.8rem);font-weight:900;margin:6px 0 0;line-height:1.15}
+.lead{margin:10px 0 0;color:var(--ink2);font-size:1.05rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow);min-width:0}
+.lock{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.92rem;color:var(--ink2)}
+.lock b{color:var(--ok)}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--code);color:var(--ink);border-radius:9px;padding:6px 14px;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{border-color:var(--accent)}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+button:focus-visible,.btn:focus-visible,.drop:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.modes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.modes label{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:5px 12px;cursor:pointer;background:var(--code)}
+.modes input{accent-color:var(--accent)}
+.modes label:has(input:checked){border-color:var(--accent);font-weight:700}
+.drop{display:grid;justify-items:center;gap:6px;text-align:center;padding:38px 16px;border:2px dashed var(--line);border-radius:16px;background:var(--panel);cursor:pointer}
+.drop.over{border-color:var(--accent);background:var(--code)}
+.drop strong{font-size:1.15rem}.drop span{color:var(--ink2);font-size:.92rem}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.res{display:grid;gap:10px}
+.res h3{margin:0;font-size:1.05rem;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;overflow-wrap:anywhere}
+.res h3 small{font-weight:400;color:var(--ink2);font-size:.9rem}
+.res.bad{border-color:var(--bad)}.res.good{border-color:var(--ok)}
+.bar{display:flex;height:16px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--code)}
+.bar i{display:block;height:100%;min-width:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.9rem}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.legend em{width:12px;height:12px;border-radius:3px;border:1px solid var(--line);display:inline-block}
+.legend b{font-family:var(--mono);font-weight:500;font-size:.85rem;color:var(--ink2)}
+.acts{display:flex;flex-wrap:wrap;gap:10px}
+.note{margin:0;font-size:.9rem;color:var(--ink2)}
+.warn{color:#9a5b00}@media (prefers-color-scheme:dark){.warn{color:#ffc766}}
+.fail{color:var(--bad);margin:0;font-size:.92rem}
+details summary{cursor:pointer;color:var(--ink2);font-size:.9rem}
+pre{margin:8px 0 0;background:var(--code);padding:10px 12px;border-radius:9px;overflow-x:auto;font:.82rem/1.55 var(--mono);white-space:pre-wrap;word-break:break-all}
+.foot{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;color:var(--ink2);font-size:.9rem}
+.status{color:var(--ink2);font-size:.95rem}
+code{font-family:var(--mono);font-size:.88em;background:var(--code);padding:1px 6px;border-radius:5px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">COLOR-BLOCK SORTER</div>
+    <h1>螢光底色分類器</h1>
+    <p class="lead">把 Word 裡底色相同的文字，依原順序放在一起。只搬動，不改字、不刪字。</p>
+  </header>
+
+  <section class="card lock" aria-label="隱私">
+    <span><b>🔒 檔案不會離開你的電腦。</b>全部在這個瀏覽器分頁裡處理，本頁已設定禁止任何連線。</span>
+    <button id="netTest" type="button">測試連線</button>
+    <span id="netOut" role="status"></span>
+  </section>
+
+  <section class="card">
+    <div class="modes" role="radiogroup" aria-label="依什麼分類">
+      <span>依　</span>
+      <label><input type="radio" name="mode" value="hl" checked>螢光筆底色</label>
+      <label><input type="radio" name="mode" value="shd">底紋</label>
+      <label><input type="radio" name="mode" value="col">字型顏色</label>
+    </div>
+  </section>
+
+  <label class="drop" id="drop">
+    <strong>把 .docx 拖到這裡，或點這裡選檔</strong>
+    <span>可一次選多個檔案</span>
+    <input id="file" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
+  </label>
+  <div class="status" id="status" role="status"></div>
+  <div id="results" style="display:grid;gap:14px"></div>
+
+  <section class="card">
+    <div class="foot">
+      <button id="self" type="button">執行自我測試</button>
+      <span>發給別人之前，先按一次，確認檢測機制本身沒壞。</span>
+    </div>
+    <pre id="selfOut" hidden></pre>
+  </section>
+</main>
+
+<script>
+'use strict';
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const NAMES = {yellow:'黃',green:'亮綠',cyan:'青',magenta:'粉',blue:'藍',red:'紅',darkBlue:'深藍',darkCyan:'深青',darkGreen:'深綠',
+  darkMagenta:'紫',darkRed:'深紅',darkYellow:'深黃',darkGray:'深灰',lightGray:'淺灰',black:'黑',white:'白'};
+const SWATCH = {yellow:'#ffe600',green:'#2ecf6e',cyan:'#25d3e0',magenta:'#ff5fb3',blue:'#3f6bff',red:'#ff3b30',darkBlue:'#1c2a8a',
+  darkCyan:'#127c86',darkGreen:'#18733c',darkMagenta:'#7a2a9c',darkRed:'#8e1d1d',darkYellow:'#9a8b00',darkGray:'#6b747d',lightGray:'#c5ccd3',
+  black:'#111111',white:'#ffffff'};
+const MODE_NAME = {hl:'螢光筆', shd:'底紋', col:'字型顏色'};
+
+/* ---------- 小工具 ---------- */
+function cp(s){ let n = s.length; for (let i = 0; i < s.length; i++){ const c = s.charCodeAt(i); if (c >= 0xDC00 && c <= 0xDFFF) n--; } return n; }
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const escA = s => esc(s).replace(/"/g,'&quot;');
+const tick = () => new Promise(r => setTimeout(r, 0));
+const fmt = n => n.toLocaleString('en-US');
+function label(c, mode){
+  if (c === 'NONE') return mode === 'col' ? '預設字色' : '無底色';
+  return NAMES[c] || ('#' + c);
+}
+function swatch(c){ return c === 'NONE' ? 'var(--none)' : (SWATCH[c] || ('#' + c)); }
+
+/* ---------- ZIP（只用瀏覽器內建的壓縮功能，不需外部函式庫） ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b){ let c = ~0; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (~c) >>> 0; }
+async function pipe(u8, stream){ const s = new Blob([u8]).stream().pipeThrough(stream); return new Uint8Array(await new Response(s).arrayBuffer()); }
+const inflateRaw = u8 => pipe(u8, new DecompressionStream('deflate-raw'));
+const deflateRaw = u8 => pipe(u8, new CompressionStream('deflate-raw'));
+
+function readZip(buf){
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let e = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--){ if (dv.getUint32(i, true) === 0x06054b50){ e = i; break; } }
+  if (e < 0) throw new Error('這不是有效的 .docx（找不到壓縮檔目錄）');
+  const n = dv.getUint16(e + 10, true), cdOff = dv.getUint32(e + 16, true);
+  if (cdOff === 0xFFFFFFFF) throw new Error('檔案太大（ZIP64），目前不支援');
+  const files = {}, dec = new TextDecoder();
+  let p = cdOff;
+  for (let i = 0; i < n; i++){
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('壓縮檔目錄損毀');
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    files[dec.decode(buf.subarray(p + 46, p + 46 + nl))] = {method, csize, lho};
+    p += 46 + nl + el + cl;
+  }
+  return {files, buf, dv};
+}
+async function zipGet(z, name){
+  const f = z.files[name]; if (!f) return null;
+  const nl = z.dv.getUint16(f.lho + 26, true), el = z.dv.getUint16(f.lho + 28, true);
+  const start = f.lho + 30 + nl + el, data = z.buf.subarray(start, start + f.csize);
+  if (f.method === 0) return data;
+  if (f.method === 8) return inflateRaw(data);
+  throw new Error('不支援的壓縮方式');
+}
+async function writeZip(entries){
+  const enc = new TextEncoder(), parts = [], cds = [];
+  let off = 0;
+  for (const e of entries){
+    const name = enc.encode(e.name), crc = crc32(e.data);
+    let method = 8, comp;
+    try { comp = await deflateRaw(e.data); } catch (_) { comp = e.data; method = 0; }
+    const lh = new Uint8Array(30 + name.length), d = new DataView(lh.buffer);
+    d.setUint32(0, 0x04034b50, true); d.setUint16(4, 20, true); d.setUint16(6, 0x0800, true); d.setUint16(8, method, true);
+    d.setUint16(12, 0x21, true); d.setUint32(14, crc, true); d.setUint32(18, comp.length, true); d.setUint32(22, e.data.length, true);
+    d.setUint16(26, name.length, true); lh.set(name, 30);
+    const ch = new Uint8Array(46 + name.length), c = new DataView(ch.buffer);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, method, true);
+    c.setUint16(14, 0x21, true); c.setUint32(16, crc, true); c.setUint32(20, comp.length, true); c.setUint32(24, e.data.length, true);
+    c.setUint16(28, name.length, true); c.setUint32(42, off, true); ch.set(name, 46);
+    parts.push(lh, comp); cds.push(ch); off += lh.length + comp.length;
+  }
+  const cdSize = cds.reduce((a, b) => a + b.length, 0), end = new Uint8Array(22), x = new DataView(end.buffer);
+  x.setUint32(0, 0x06054b50, true); x.setUint16(8, entries.length, true); x.setUint16(10, entries.length, true);
+  x.setUint32(12, cdSize, true); x.setUint32(16, off, true);
+  return new Blob([...parts, ...cds, end], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+/* ---------- 讀取 docx ---------- */
+function inFallback(el){ for (let a = el.parentNode; a && a.nodeType === 1; a = a.parentNode) if (a.localName === 'Fallback') return true; return false; }
+function collectRuns(n, out){
+  for (let c = n.firstElementChild; c; c = c.nextElementSibling){
+    const ln = c.localName;
+    if (c.namespaceURI === W){
+      if (ln === 'r') out.push(c);
+      else if (ln !== 'p' && ln !== 'pPr' && ln !== 'del' && ln !== 'moveFrom' && ln !== 'rPr') collectRuns(c, out);
+    } else if (ln === 'AlternateContent' || ln === 'Choice') collectRuns(c, out);
+  }
+}
+function runText(r){
+  let o = '';
+  for (let c = r.firstElementChild; c; c = c.nextElementSibling){
+    if (c.namespaceURI !== W) continue;
+    const n = c.localName;
+    if (n === 't') o += c.textContent; else if (n === 'tab') o += '\t'; else if (n === 'br' || n === 'cr') o += '\n';
+  }
+  return o;
+}
+function runFmt(r){
+  const f = {hl:'NONE', shd:'NONE', col:'NONE'};
+  for (let pr = r.firstElementChild; pr; pr = pr.nextElementSibling){
+    if (pr.namespaceURI !== W || pr.localName !== 'rPr') continue;
+    for (let c = pr.firstElementChild; c; c = c.nextElementSibling){
+      if (c.namespaceURI !== W) continue;
+      if (c.localName === 'highlight'){ const v = c.getAttributeNS(W, 'val'); f.hl = !v || v === 'none' ? 'NONE' : v; }
+      else if (c.localName === 'shd'){ const v = c.getAttributeNS(W, 'fill'); f.shd = !v || v === 'auto' ? 'NONE' : v.toUpperCase(); }
+      else if (c.localName === 'color'){ const v = c.getAttributeNS(W, 'val'); f.col = !v || v === 'auto' ? 'NONE' : v.toUpperCase(); }
+    }
+    break;
+  }
+  return f;
+}
+async function loadXml(u8, part){
+  const z = readZip(u8), raw = await zipGet(z, part);
+  if (!raw) throw new Error('找不到 ' + part + '，這不是 Word 檔');
+  const doc = new DOMParser().parseFromString(new TextDecoder().decode(raw), 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error(part + ' 格式錯誤');
+  return doc;
+}
+function paragraphs(doc){ return Array.from(doc.getElementsByTagNameNS(W, 'p')).filter(p => !inFallback(p)); }
+function totalOtherPath(doc){        // 另一條路徑：不走「段落→run」，直接數所有文字節點
+  let n = 0;
+  for (const t of doc.getElementsByTagNameNS(W, 't')) if (!inFallback(t)) n += cp(t.textContent);
+  for (const tag of ['tab', 'br', 'cr'])
+    for (const e of doc.getElementsByTagNameNS(W, tag))
+      if (e.parentNode.namespaceURI === W && e.parentNode.localName === 'r' && !inFallback(e)) n++;
+  return n;
+}
+async function readDoc(u8){
+  const doc = await loadXml(u8, 'word/document.xml');
+  const segs = [], stats = {hl:0, shd:0, col:0};
+  let sid = 0;
+  paragraphs(doc).forEach((p, pi) => {
+    const runs = []; collectRuns(p, runs);
+    for (const r of runs){
+      const text = runText(r); if (!text) continue;
+      const f = runFmt(r), len = cp(text);
+      if (f.hl !== 'NONE') stats.hl += len; if (f.shd !== 'NONE') stats.shd += len; if (f.col !== 'NONE') stats.col += len;
+      segs.push({sid: sid++, pi, hl: f.hl, shd: f.shd, col: f.col, text});
+    }
+  });
+  return {segs, total: totalOtherPath(doc), stats};
+}
+
+/* ---------- 分組與輸出 ---------- */
+function group(segs, mode){
+  const g = new Map(), last = new Map();
+  for (const s of segs){
+    const c = s[mode]; let paras = g.get(c);
+    if (!paras){ paras = []; g.set(c, paras); }
+    if (last.get(c) === s.pi) paras[paras.length - 1].push(s); else paras.push([s]);
+    last.set(c, s.pi);
+  }
+  if (g.has('NONE')){ const v = g.get('NONE'); g.delete('NONE'); g.set('NONE', v); }
+  return g;
+}
+const gCount = paras => paras.reduce((a, p) => a + p.reduce((b, s) => b + cp(s.text), 0), 0);
+function runXml(text, c, mode){
+  let pr = '';
+  if (c !== 'NONE'){
+    const v = escA(c);
+    pr = mode === 'shd' ? `<w:rPr><w:shd w:val="clear" w:color="auto" w:fill="${v}"/></w:rPr>`
+       : mode === 'col' ? `<w:rPr><w:color w:val="${v}"/></w:rPr>`
+       : `<w:rPr><w:highlight w:val="${v}"/></w:rPr>`;
+  }
+  const body = text.split('\n').map(l => l.split('\t').map(x => x ? `<w:t xml:space="preserve">${esc(x)}</w:t>` : '').join('<w:tab/>')).join('<w:br/>');
+  return `<w:r>${pr}${body}</w:r>`;
+}
+const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+async function packDocx(bodyXml){
+  const enc = new TextEncoder();
+  const doc = `${HEAD}<w:document xmlns:w="${W}"><w:body>${bodyXml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const styles = `${HEAD}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Microsoft JhengHei" w:cs="Calibri"/><w:sz w:val="22"/><w:lang w:val="en-US" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style></w:styles>`;
+  const types = `${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+  const rels = `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const drels = `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  return writeZip([
+    {name:'[Content_Types].xml', data: enc.encode(types)},
+    {name:'_rels/.rels', data: enc.encode(rels)},
+    {name:'word/document.xml', data: enc.encode(doc)},
+    {name:'word/styles.xml', data: enc.encode(styles)},
+    {name:'word/_rels/document.xml.rels', data: enc.encode(drels)},
+  ]);
+}
+async function buildSorted(g, total, mode){
+  let b = `<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>${esc(`原文 ${total} 字，已按${MODE_NAME[mode]}分組並通過 5 項完整性檢測。`)}</w:t></w:r></w:p>`;
+  for (const [c, paras] of g){
+    b += `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${esc(`${label(c, mode)}　${gCount(paras)} 字`)}</w:t></w:r></w:p>`;
+    for (const para of paras) b += `<w:p>${para.map(s => runXml(s.text, c, mode)).join('')}</w:p>`;
+  }
+  return packDocx(b);
+}
+async function blobBytes(blob){ return new Uint8Array(await blob.arrayBuffer()); }
+
+/* ---------- 檢測 ---------- */
+function checkMemory(segs, total, g){
+  const items = []; for (const paras of g.values()) for (const para of paras) for (const s of para) items.push(s);
+  const sum = segs.reduce((a, s) => a + cp(s.text), 0);
+  const seen = new Uint8Array(segs.length); let dup = 0;
+  for (const s of items){ if (seen[s.sid]) dup++; seen[s.sid] = 1; }
+  const idOk = items.length === segs.length && dup === 0;
+  items.sort((a, b) => a.sid - b.sid);
+  const rebuilt = items.map(s => s.text).join(''), original = segs.map(s => s.text).join('');
+  return [
+    {name:'字數守恆（片段總和 = 原文總字數）', ok: sum === total, detail: `${sum} vs ${total}`},
+    {name:'編號不重複不遺漏', ok: idOk, detail: `${items.length}/${segs.length}`},
+    {name:'還原測試（排回原序後逐字一致）', ok: rebuilt === original, detail: ''},
+  ];
+}
+async function checkOutput(g, u8, mode){
+  const doc = await loadXml(u8, 'word/document.xml');
+  const groups = []; let bad = 0, cur = null;
+  const keys = Array.from(g.keys());
+  for (const p of paragraphs(doc)){
+    let style = null;
+    for (let c = p.firstElementChild; c; c = c.nextElementSibling)
+      if (c.namespaceURI === W && c.localName === 'pPr'){ for (let d = c.firstElementChild; d; d = d.nextElementSibling) if (d.localName === 'pStyle') style = d.getAttributeNS(W, 'val'); }
+    if (style === 'Heading2'){ groups.push([]); cur = keys[groups.length - 1]; continue; }
+    if (!groups.length) continue;
+    const runs = []; collectRuns(p, runs);
+    groups[groups.length - 1].push(runs.map(runText).join(''));
+    for (const r of runs) if (runFmt(r)[mode] !== cur) bad++;
+  }
+  const exp = keys.map(k => g.get(k).map(para => para.map(s => s.text).join('')));
+  let same = groups.length === exp.length;
+  for (let i = 0; same && i < exp.length; i++){
+    if (groups[i].length !== exp[i].length) same = false;
+    else for (let j = 0; j < exp[i].length; j++) if (groups[i][j] !== exp[i][j]){ same = false; break; }
+  }
+  return [
+    {name:'輸出檔重讀後各組內容一致', ok: same, detail: ''},
+    {name:'輸出檔每個字的底色與其所在組相符', ok: bad === 0, detail: `異常 run 數 ${bad}`},
+  ];
+}
+
+async function processDoc(name, u8, mode, status){
+  status && status('讀取與解析中…'); await tick();
+  const {segs, total, stats} = await readDoc(u8);
+  if (!segs.length) throw new Error('讀不到任何文字');
+  status && status('分組與檢測中…'); await tick();
+  const g = group(segs, mode);
+  const checks = checkMemory(segs, total, g);
+  const blob = await buildSorted(g, total, mode);
+  checks.push(...await checkOutput(g, await blobBytes(blob), mode));
+  const ok = checks.every(c => c.ok);
+
+  const warns = [], byPar = new Map();
+  for (const s of segs){ if (!byPar.has(s.pi)) byPar.set(s.pi, []); byPar.get(s.pi).push(s); }
+  for (const [pi, items] of byPar) if (new Set(items.map(s => s[mode])).size > 1)
+    warns.push(`段落#${pi} 句中換色：` + items.map(s => `${label(s[mode], mode)}:${s.text.slice(0, 20)}`).join(' | '));
+  for (const s of segs) if (s[mode] !== 'NONE' && !s.text.trim()) warns.push(`片段#${s.sid} 是純空白但有顏色(${label(s[mode], mode)})`);
+  const noneShare = g.has('NONE') ? gCount(g.get('NONE')) / Math.max(total, 1) : 0;
+
+  const L = [`# 驗證報告：${name}`, '', `分類依據：${MODE_NAME[mode]}`, '', '## 各組統計'];
+  for (const [c, paras] of g) L.push(`- ${label(c, mode)}（${c}）：${gCount(paras)} 字 / ${paras.length} 段`);
+  L.push(`- 總計：${total} 字 / ${segs.length} 個片段`, '', '## 檢測結果');
+  for (const c of checks) L.push(`- ${c.ok ? 'PASS' : 'FAIL'}　${c.name} ${c.detail}`);
+  L.push('', `## 需人工複查（${warns.length}）`, ...warns.slice(0, 200).map(w => '- ' + w));
+  return {name, ok, g, checks, blob: ok ? blob : null, total, stats, warns, noneShare, mode, report: L.join('\n')};
+}
+
+/* ---------- 自我測試 ---------- */
+function mulberry32(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const SAMPLE = '這是一段用來測試的文字，包含中文、English words、數字 12345，以及標點符號！😀\n第二段：句子會在任何位置被換色，甚至在單詞 mid-dle 的中間。\tTab 也要保留。\n\nThird paragraph with 空白 and  double  spaces.\n';
+async function selfTest(log){
+  let all = true;
+  const palette = {hl: ['yellow','green','magenta','cyan','red','blue','NONE'], shd: ['FFFF00','00FF00','FF99CC','00FFFF','FF0000','0000FF','NONE'], col: ['C00000','0070C0','00B050','7030A0','ED7D31','FFC000','NONE']};
+  for (const [mode, seed] of [['hl', 1], ['hl', 2], ['shd', 3], ['col', 4]]){
+    const rnd = mulberry32(seed), pal = palette[mode], truth = {};
+    let body = '';
+    for (const para of SAMPLE.repeat(40).split('\n').filter(Boolean)){
+      let i = 0, runs = '';
+      const chars = Array.from(para);
+      while (i < chars.length){
+        const n = [1, 3, 8, 20, 60][Math.floor(rnd() * 5)], seg = chars.slice(i, i + n).join(''); i += n;
+        const c = pal[Math.floor(rnd() * pal.length)];
+        runs += runXml(seg, c, mode); truth[c] = (truth[c] || '') + seg;
+      }
+      body += `<w:p>${runs}</w:p>`;
+    }
+    const src = await blobBytes(await packDocx(body));
+    const r = await processDoc(`自測(${MODE_NAME[mode]}#${seed}).docx`, src, mode);
+    let same = !!r.blob;
+    if (r.blob){
+      const out = await blobBytes(r.blob), doc = await loadXml(out, 'word/document.xml'), got = {};
+      let started = false;
+      for (const p of paragraphs(doc)){
+        const st = p.getElementsByTagNameNS(W, 'pStyle')[0];
+        if (st && st.getAttributeNS(W, 'val') === 'Heading2'){ started = true; continue; }
+        if (!started) continue;
+        const runs = []; collectRuns(p, runs);
+        for (const x of runs) got[runFmt(x)[mode]] = (got[runFmt(x)[mode]] || '') + runText(x);
+      }
+      same = JSON.stringify(Object.keys(truth).sort()) === JSON.stringify(Object.keys(got).sort()) && Object.keys(truth).every(k => truth[k] === got[k]);
+    }
+    log(`${r.ok && same ? '✅' : '❌'} ${MODE_NAME[mode]}：${fmt(r.total)} 字，5 項檢測${r.ok ? '全過' : '未過'}，與標準答案${same ? '逐字一致' : '不一致'}`);
+    all = all && r.ok && same;
+  }
+  // 故意弄壞：刪一個字，檢測必須報錯
+  const segs = [{sid:0, pi:0, hl:'yellow', shd:'NONE', col:'NONE', text:'甲乙丙'}, {sid:1, pi:0, hl:'NONE', shd:'NONE', col:'NONE', text:'丁'}];
+  const g = group(segs, 'hl'); g.get('yellow')[0][0] = {...segs[0], text:'甲乙'};
+  const caught = !checkMemory(segs, 4, g).every(c => c.ok);
+  log(caught ? '✅ 故意刪掉一個字，檢測有抓到' : '❌ 檢測沒抓到被刪的字！');
+  all = all && caught;
+  log(all ? '\n自我測試全部通過。' : '\n自我測試失敗，請勿使用。');
+  return all;
+}
+
+/* ---------- 介面 ---------- */
+const $ = id => document.getElementById(id);
+let files = [], urls = [];
+const mode = () => document.querySelector('input[name=mode]:checked').value;
+
+function dl(blob, name){ const u = URL.createObjectURL(blob); urls.push(u); const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+function renderResult(r){
+  const box = document.createElement('section'); box.className = 'card res ' + (r.ok ? 'good' : 'bad');
+  const h = document.createElement('h3');
+  h.textContent = `${r.ok ? '✅' : '❌'} ${r.name}`;
+  const small = document.createElement('small'); small.textContent = `共 ${fmt(r.total)} 字　依${MODE_NAME[r.mode]}分類　${r.ok ? '5 項檢測全過' : '檢測未過'}`;
+  h.append(small); box.append(h);
+
+  const bar = document.createElement('div'); bar.className = 'bar';
+  const leg = document.createElement('div'); leg.className = 'legend';
+  for (const [c, paras] of r.g){
+    const n = gCount(paras), i = document.createElement('i');
+    i.style.width = (n / Math.max(r.total, 1) * 100) + '%'; i.style.background = swatch(c); i.title = `${label(c, r.mode)} ${fmt(n)} 字`; bar.append(i);
+    const s = document.createElement('span'), e = document.createElement('em'), b = document.createElement('b');
+    e.style.background = swatch(c); b.textContent = fmt(n); s.append(e, document.createTextNode(label(c, r.mode) + ' '), b); leg.append(s);
+  }
+  box.append(bar, leg);
+
+  const acts = document.createElement('div'); acts.className = 'acts';
+  const base = r.name.replace(/\.docx$/i, '');
+  if (r.ok){
+    const b = document.createElement('button'); b.className = 'primary'; b.type = 'button'; b.textContent = `下載 ${base}_分類.docx`;
+    b.onclick = () => dl(r.blob, base + '_分類.docx'); acts.append(b);
+  } else {
+    const p = document.createElement('p'); p.className = 'fail';
+    p.textContent = '沒有產出分類檔，未通過：' + r.checks.filter(c => !c.ok).map(c => c.name).join('；'); box.append(p);
+  }
+  const rb = document.createElement('button'); rb.type = 'button'; rb.textContent = '驗證報告（.md）';
+  rb.onclick = () => dl(new Blob([r.report], {type:'text/markdown'}), base + '_驗證報告.md'); acts.append(rb);
+  box.append(acts);
+
+  if (r.noneShare > 0.5){
+    const alt = Object.entries(r.stats).filter(([k]) => k !== r.mode).sort((a, b) => b[1] - a[1])[0];
+    const p = document.createElement('p'); p.className = 'note warn';
+    p.textContent = `⚠ 無顏色的字佔 ${Math.round(r.noneShare * 100)}%。` + (alt && alt[1] > 0 ? `這個檔案偵測到「${MODE_NAME[alt[0]]}」共 ${fmt(alt[1])} 字，上方可改選試試。` : '若你以為已經塗色，檔案用的可能不是這三種標記。');
+    box.append(p);
+  }
+  if (r.warns.length){
+    const d = document.createElement('details'), s = document.createElement('summary'), pre = document.createElement('pre');
+    s.textContent = `需人工複查（${r.warns.length}）`; pre.textContent = r.warns.slice(0, 50).join('\n') + (r.warns.length > 50 ? '\n…（完整清單見驗證報告）' : '');
+    d.append(s, pre); box.append(d);
+  }
+  return box;
+}
+let running = Promise.resolve();
+function run(){
+  running = running.then(async () => {
+    const out = $('results'); out.replaceChildren(); urls.forEach(URL.revokeObjectURL); urls = [];
+    for (const f of files){
+      try {
+        const u8 = new Uint8Array(await f.arrayBuffer());
+        const r = await processDoc(f.name, u8, mode(), t => $('status').textContent = `${f.name}：${t}`);
+        out.append(renderResult(r));
+      } catch (e){
+        const box = document.createElement('section'); box.className = 'card res bad';
+        const h = document.createElement('h3'); h.textContent = `❌ ${f.name}`; const p = document.createElement('p'); p.className = 'fail'; p.textContent = String(e.message || e);
+        box.append(h, p); out.append(box);
+      }
+    }
+    $('status').textContent = files.length ? '完成。' : '';
+  });
+  return running;
+}
+function take(list){ files = Array.from(list).filter(f => /\.docx$/i.test(f.name)); if (!files.length){ $('status').textContent = '請選擇 .docx 檔（舊的 .doc 請先另存成 .docx）'; return; } run(); }
+$('file').addEventListener('change', e => { take(e.target.files); e.target.value = ''; });
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => take(e.dataTransfer.files));
+document.querySelectorAll('input[name=mode]').forEach(i => i.addEventListener('change', () => { if (files.length) run(); }));
+$('netTest').addEventListener('click', async () => {
+  $('netOut').textContent = '測試中…';
+  try { await fetch('https://example.com/', {mode:'no-cors', cache:'no-store'}); $('netOut').textContent = '⚠ 連線沒有被擋下，請不要使用本頁處理機密檔案'; }
+  catch (_) { $('netOut').textContent = '✓ 連線已被瀏覽器擋下，資料送不出去'; }
+});
+$('self').addEventListener('click', async () => {
+  const pre = $('selfOut'); pre.hidden = false; pre.textContent = '執行中…\n'; let t = '';
+  await selfTest(l => { t += l + '\n'; pre.textContent = t; });
+});
+window.__ct = {processDoc, selfTest, readDoc, group, label, blobBytes};
+</script>
+</body>
+</html>
